@@ -1,0 +1,76 @@
+import boto3
+
+def lambda_handler(event, context):
+    s3 = boto3.client('s3')
+    unencrypted_buckets = []
+
+    # List all buckets
+    buckets = s3.list_buckets()
+
+    for bucket in buckets['Buckets']:
+        bucket_name = bucket['Name']
+        try:
+            s3.get_bucket_encryption(Bucket=bucket_name)
+            print(f"✅ Bucket encrypted: {bucket_name}")
+        except s3.exceptions.ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'ServerSideEncryptionConfigurationNotFoundError':
+                print(f"❌ Bucket NOT encrypted: {bucket_name}")
+                unencrypted_buckets.append(bucket_name)
+            else:
+                print(f"⚠️ Could not access bucket: {bucket_name} - {str(e)}")
+
+    # Optional SNS alert
+    if unencrypted_buckets:
+        sns = boto3.client('sns')
+        topic_arn = 'arn:aws:sns:region:account-id:topic-name'  # replace
+        message = "Unencrypted S3 Buckets:\n" + "\n".join(unencrypted_buckets)
+        sns.publish(TopicArn=topic_arn, Message=message, Subject="S3 Encryption Alert")
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetEncryptionConfiguration",
+        "s3:ListAllMyBuckets",
+        "logs:*",
+        "sns:Publish"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+# AWS Lambda: Detect Unencrypted S3 Buckets
+
+## 🎯 Objective
+This project automatically detects all S3 buckets without server-side encryption (SSE) enabled and optionally sends an alert via SNS.
+
+## 🛠️ Services Used
+- AWS Lambda (Python)
+- Boto3 (Python SDK)
+- Amazon S3
+- Amazon CloudWatch Logs
+- Amazon EventBridge (Scheduler)
+- Amazon SNS (Optional)
+
+## 🧩 Lambda Function
+Checks all S3 buckets and logs or notifies if encryption is not enabled.
+
+## 🔐 IAM Permissions
+Use the `iam-policy.json` to create the appropriate IAM role.
+
+## ⏰ Scheduling
+Use EventBridge to trigger the Lambda daily:
+
+## 📩 SNS Alerts (Optional)
+To receive email or SMS alerts, configure an SNS topic and subscribe.
+
+## 📦 Deployment
+You can zip `lambda_function.py` and upload it to AWS Lambda.
+{
+  "Name": "DailyCheckUnencryptedS3Buckets",
+  "ScheduleExpression": "cron(0 2 * * ? *)",
+  "State": "ENABLED"
+}
+boto3
