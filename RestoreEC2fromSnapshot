@@ -1,0 +1,67 @@
+restore-ec2-from-snapshot/
+│
+├── README.md                 ← Main documentation with steps
+├── restore.sh                ← Bash script to automate (optional)
+├── restore_ec2.py            ← Python version using Boto3 (optional)
+├── terraform/                ← Terraform files (if you want to use IaC)
+│   ├── main.tf
+│   ├── variables.tf
+│   └── outputs.tf
+mkdir restore-ec2-from-snapshot
+cd restore-ec2-from-snapshot
+# Restore EC2 Instance from Snapshot
+
+This project documents and optionally automates how to restore an EC2 instance from an EBS snapshot.
+
+## Manual Steps
+1. Go to EC2 > Snapshots and find your snapshot ID.
+2. Create a new volume from the snapshot.
+3. Launch a new EC2 instance in the same AZ.
+4. Attach the volume as the root device (`/dev/xvda`).
+5. Start the instance.
+
+## Automation
+You can use the `restore.sh` or `restore_ec2.py` to automate the creation and attachment process.
+
+## Prerequisites
+- AWS CLI or Python Boto3 installed
+- IAM credentials with EC2 permissions
+#!/bin/bash
+
+SNAPSHOT_ID="snap-xxxxxxxxxxxxxxxxx"
+AZ="us-east-1a"
+INSTANCE_ID="i-xxxxxxxxxxxxxxxxx"
+
+echo "Creating volume from snapshot..."
+VOLUME_ID=$(aws ec2 create-volume \
+  --snapshot-id $SNAPSHOT_ID \
+  --availability-zone $AZ \
+  --volume-type gp2 \
+  --query "VolumeId" --output text)
+
+echo "Waiting for volume to become available..."
+aws ec2 wait volume-available --volume-ids $VOLUME_ID
+
+echo "Attaching volume to EC2 instance..."
+aws ec2 attach-volume \
+  --volume-id $VOLUME_ID \
+  --instance-id $INSTANCE_ID \
+  --device /dev/xvda
+
+echo "Volume $VOLUME_ID attached to instance $INSTANCE_ID"
+git init
+git add .
+git commit -m "Initial commit: Restore EC2 from snapshot docs and script"
+gh repo create restore-ec2-from-snapshot --public --source=. --remote=origin
+git push -u origin main
+resource "aws_ebs_volume" "from_snapshot" {
+  availability_zone = var.availability_zone
+  snapshot_id       = var.snapshot_id
+  type              = "gp2"
+}
+
+resource "aws_volume_attachment" "ec2_attach" {
+  device_name = "/dev/xvda"
+  instance_id = var.instance_id
+  volume_id   = aws_ebs_volume.from_snapshot.id
+}
