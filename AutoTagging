@@ -1,0 +1,65 @@
+auto-tag-ec2/
+│
+├── template.yaml              ← SAM template (Infra as Code)
+├── ec2_tagger/                
+│   └── app.py                 ← Lambda function code
+└── README.md                  ← Description of project
+import boto3
+import datetime
+
+def lambda_handler(event, context):
+    ec2 = boto3.client('ec2')
+    instance_id = event['detail']['responseElements']['instancesSet']['items'][0]['instanceId']
+    
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    
+    ec2.create_tags(
+        Resources=[instance_id],
+        Tags=[
+            {'Key': 'LaunchDate', 'Value': today},
+            {'Key': 'Environment', 'Value': 'Production'}
+        ]
+    )
+    return f"Tagged EC2 instance {instance_id}"
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Auto-tag EC2 instances when launched
+
+Resources:
+  EC2TaggerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: AutoTagEC2Instances
+      Handler: app.lambda_handler
+      Runtime: python3.12
+      CodeUri: ec2_tagger/
+      Role: arn:aws:iam::<your-account-id>:role/LambdaEC2TaggerRole
+      Events:
+        EC2RunInstancesEvent:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - "aws.ec2"
+              detail-type:
+                - "AWS API Call via CloudTrail"
+              detail:
+                eventName:
+                  - "RunInstances"
+cd auto-tag-ec2
+git init
+git add .
+git commit -m "Initial commit: Auto-tag EC2 instances on launch"
+git remote add origin https://github.com/yourusername/auto-tag-ec2.git
+git push -u origin main
+# Step 1: Package (creates deployable template)
+sam package \
+  --template-file template.yaml \
+  --s3-bucket your-s3-bucket-name \
+  --output-template-file packaged.yaml
+
+# Step 2: Deploy
+sam deploy \
+  --template-file packaged.yaml \
+  --stack-name auto-tag-ec2 \
+  --capabilities CAPABILITY_IAM
